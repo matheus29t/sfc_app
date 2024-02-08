@@ -3,11 +3,12 @@ class TransitionBackError(Exception):
         self.message = message
 
 class Node:
-    def __init__(self, node_id, is_bidirect, **kwargs):
+    def __init__(self, node_id, is_bidirect, group_id=None, **kwargs):
         self.id=node_id
         self.prev=None
         self.next=None
         self.is_bidirect=is_bidirect
+        self.group_id = group_id  # New attribute for group ID
 
     def __str__(self):
         return str(self.id)    
