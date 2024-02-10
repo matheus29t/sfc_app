@@ -8,7 +8,7 @@ ip addr del $PORT_IP dev eth0 &&\
 ip ad add $PORT_IP dev lan-br &&\
 ip link set lan-br up &&\
 ip route add default via $GW_IP dev lan-br &&\
-ovs-vsctl set-controller lan-br tcp:$GW_IP:6633 &&\
+ovs-vsctl set-controller lan-br tcp:$GW_IP:6634 &&\
 sleep 3 &&\
 echo "Registering" &&\
 /json_register.py $@

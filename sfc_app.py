@@ -32,7 +32,49 @@ class vnf(Node):
         cur.execute(''' select dpid, in_port, locator_addr from vnf where id=? and iftype & 1 != 0''', (self.id,))
         self.dpid_out, self.port_out, self.locator_addr_out = cur.fetchone()
         if is_bidirect.lower() == "false":
-            self.is_bidirect = False   
+            self.is_bidirect = False
+
+class Group:
+    def __init__(self, group_id):
+        self.group_id = group_id
+        self.vnfs = []  # List to store VNFs in this group
+        self.last_used_index = -1  # Track the last used VNF's index for round-robin
+
+    def add_vnf(self, vnf_id):
+        if vnf_id not in self.vnfs:
+            self.vnfs.append(vnf_id)
+        
+    def remove_vnf(self, vnf_id):
+        if vnf_id in self.vnfs:
+            index = self.vnfs.index(vnf_id)
+            self.vnfs.remove(vnf_id)
+            if index <= self.last_used_index:
+                self.last_used_index -= 1
+
+    def get_next_vnf(self):
+        if not self.vnfs:
+            return None
+        self.last_used_index = (self.last_used_index + 1) % len(self.vnfs)
+        return self.vnfs[self.last_used_index]
+
+    def update_last_used_vnf_index(self):
+        # Connect to the database
+        conn = sqlite3.connect('nfv.sqlite')
+        cur = conn.cursor()
+        # Fetch the last used VNF for the group
+        cur.execute('''SELECT last_used_vnf FROM group_info WHERE group_id = ?''', (self.group_id,))
+        last_used_vnf_id = cur.fetchone()[0]
+        if last_used_vnf_id is not None:
+            # Find the index of the last used VNF in the self.vnfs list
+            if last_used_vnf_id in self.vnfs:
+                self.last_used_index = self.vnfs.index(last_used_vnf_id)
+        cur.close()
+        conn.close()
+
+    def __str__(self):
+        return f"Group ID: {self.group_id}, VNFs: {self.vnfs}, Last Used Index: {self.last_used_index}"
+
+
 
 class sfc(AsymLList):
     def __init__(self, flow_id, nodeClass=vnf, cur=None):
@@ -57,65 +99,64 @@ class sfc(AsymLList):
         self.reverse_flow_id = self.flow_id+DELTA
         self.flows[self.flow_id] = self.flow_dict
         self.flows[self.reverse_flow_id] = sfc_app_cls.reverse_flow(self.flows[self.flow_id])
-        self.cur.execute('''select group_id from service where service_id = ? except select next_group_id from service where service_id = ? ''', (self.service_id, self.service_id))
-        group_id = self.cur.fetchone()[0]
-        super().__init__(group_id, is_bidirect=True, nodeClass=nodeClass, cur=self.cur)   
+        self.group_ids = self.get_ordered_group_ids()
+        self.groups = self.fill_groups()
+        group_id = self.group_ids.pop(0)
+        vnf_id = self.groups[group_id].get_next_vnf()
+        super().__init__(vnf_id, is_bidirect=True, nodeClass=nodeClass, cur=self.cur)   
         self.fill()
 
     def __str__(self):
         return str(self.forward())
     
-    def get_last_used_index(self, group_id):
-        """
-        Fetches the last used VNF index for a given group.
+    def fill_group_from_db(self, group_id):
+        group = Group(group_id)
+        # Query for VNFs belonging to the group
+        cur.execute('''SELECT vnf_id FROM group_vnfs WHERE group_id = ? ORDER BY vnf_order''', (group_id,))
+        vnfs = cur.fetchall()
+        for vnf in vnfs:
+            group.add_vnf(vnf[0])
+        group.update_last_used_vnf_index()  # Update the last used index based on database
+        return group
 
-        Args:
-        group_id: The ID of the group to fetch the last used VNF index for.
+    def fill_groups(self):
+        groups = {}
+        # Initialize Group objects
+        for group_id in self.group_ids:
+            group = self.fill_group_from_db(group_id)
+            groups[group_id] = group
+        return groups
 
-        Returns:
-        The index of the last used VNF in the group.
-        """
-        self.cur.execute("SELECT last_used_vnf FROM group_info WHERE group_id = ?", (group_id,))
-        result = cur.fetchone()
-        if result:
-            logging.debug('Last used index for group %s: %s', group_id, result)
-            return result[0]
-        else:
-            return None  # Or appropriate default value, e.g., 0
+    def get_ordered_group_ids(self):
+        # Fetch all group IDs and next group IDs for the given service ID
+        cur.execute("SELECT group_id, next_group_id FROM service WHERE service_id = ?", (self.service_id,))
+        rows = cur.fetchall()
 
-    def set_last_used_index(self, group_id, last_used_vnf):
-        """
-        Updates the last used VNF index for a given group.
+        # Create a mapping from group_id to next_group_id
+        group_to_next = {row[0]: row[1] for row in rows if row[1] is not None}
 
-        Args:
-        group_id: The ID of the group to update the last used VNF index for.
-        last_used_vnf: The new last used VNF index to set.
-        """
-        logging.debug('Setting last used index for group %s: %s', group_id, last_used_vnf)
-        self.cur.execute("UPDATE group_info SET last_used_vnf = ? WHERE group_id = ?", (last_used_vnf, group_id))
-        self.cur.connection.commit()  # Ensure changes are committed to the database.
+        # Find the first group ID (the one that does not appear as a next_group_id)
+        start_group_id = None
+        for group_id in group_to_next:
+            if not any(group_id == next_id for next_id in group_to_next.values()):
+                start_group_id = group_id
+                break
 
-    
-    def round_robin_select(self, group_id):
-        # Fetch all VNFs in the group
-        self.cur.execute('''SELECT id FROM vnf WHERE group_id = ? ORDER BY id''', (group_id,))
-        vnfs = self.cur.fetchall()
-        if not vnfs:
-            return None
+        # Follow the chain to get the ordered list of group IDs
+        ordered_group_ids = []
+        while start_group_id is not None:
+            ordered_group_ids.append(start_group_id)
+            start_group_id = group_to_next.get(start_group_id, None)
 
-        last_index = self.get_last_used_index(group_id)
-        next_index = (last_index + 1) % len(vnfs)  # Round-robin logic
-        self.set_last_used_index(group_id, next_index)
-
-        return vnfs[next_index][0]
-
+        return ordered_group_ids
     def append(self):
-        next_vnf_id = self.round_robin_select(self.last.id)
-        if next_vnf_id is None:
+        if not self.group_ids:
             return None
-        logging.debug('Trying to append %s', next_vnf_id)
+        group_id = self.group_ids.pop(0)
+        next_vnf_id = self.groups[group_id].get_next_vnf()
+        logging.debug(f'Appending VNF {next_vnf_id} from group {group_id}')
         return super().append(next_vnf_id, cur=self.cur)
-            
+        
     def fill(self):
         logging.debug('Filling...')
         while self.append():

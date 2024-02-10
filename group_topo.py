@@ -23,7 +23,7 @@ def topology():
     s3 = net.addSwitch( 's3', listenPort=6673 )
     s4 = net.addSwitch( 's4', listenPort=6674 )
     s5 = net.addSwitch( 's5', listenPort=6675 )
-    c7 = net.addController( 'c7', controller=RemoteController, ip='127.0.0.1', port=6633 )
+    c7 = net.addController( 'c7', controller=RemoteController, ip='127.0.0.1', port=6634 )
  
     print("*** Creating links")
     
