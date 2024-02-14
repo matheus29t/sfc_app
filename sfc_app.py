@@ -55,6 +55,7 @@ class Group:
         if not self.vnfs:
             return None
         self.last_used_index = (self.last_used_index + 1) % len(self.vnfs)
+        self.update_database()
         return self.vnfs[self.last_used_index]
 
     def update_last_used_vnf_index(self):
@@ -68,6 +69,16 @@ class Group:
             # Find the index of the last used VNF in the self.vnfs list
             if last_used_vnf_id in self.vnfs:
                 self.last_used_index = self.vnfs.index(last_used_vnf_id)
+        cur.close()
+        conn.close()
+
+    def update_database(self):
+        # Connect to the database
+        conn = sqlite3.connect('nfv.sqlite')
+        cur = conn.cursor()
+        cur.execute('''UPDATE group_info SET last_used_vnf = ? WHERE group_id = ?''', (self.vnfs[self.last_used_index], self.group_id))
+        cur.connection.commit()
+        logging.debug('Updated last used vnf for group %s in the DB: %s', self.group_id, self.vnfs[self.last_used_index])
         cur.close()
         conn.close()
 
@@ -103,6 +114,7 @@ class sfc(AsymLList):
         self.groups = self.fill_groups()
         group_id = self.group_ids.pop(0)
         vnf_id = self.groups[group_id].get_next_vnf()
+        logging.debug('Selected vnf with id %s from group %s', vnf_id, group_id)
         super().__init__(vnf_id, is_bidirect=True, nodeClass=nodeClass, cur=self.cur)   
         self.fill()
 
@@ -149,20 +161,21 @@ class sfc(AsymLList):
             start_group_id = group_to_next.get(start_group_id, None)
 
         return ordered_group_ids
+
     def append(self):
         if not self.group_ids:
             return None
         group_id = self.group_ids.pop(0)
-        next_vnf_id = self.groups[group_id].get_next_vnf()
-        logging.debug(f'Appending VNF {next_vnf_id} from group {group_id}')
-        return super().append(next_vnf_id, cur=self.cur)
-        
+        vnf_id = self.groups[group_id].get_next_vnf()
+        logging.debug('Selected vnf with id %s from group %s', vnf_id, group_id)
+        return super().append(vnf_id, cur=self.cur)
+
     def fill(self):
         logging.debug('Filling...')
         while self.append():
             pass
         return self.last        
-    
+
     def install_catching_rule(self, sfc_app_cls):
         logging.debug("Adding catching rule...")    
         actions = []
