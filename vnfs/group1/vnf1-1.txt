@@ -1,0 +1,1 @@
+{name=vnf1, vnf_id=111, type_id=1, group_id=1, iftype=2, bidirectional=True, geo_location=server111.rack2.row3.room4}

@@ -443,6 +443,28 @@ class sfc_app_cls(app_manager.RyuApp):
                             (vnf_id, name, type_id, group_id, geo_location,
                              iftype, bidirectional, dpid, in_port, locator_addr)
                            )
+                # Update or insert into group_info table with the last used VNF
+                cur.execute('SELECT group_id FROM group_info WHERE group_id = ?', (group_id,))
+                if cur.fetchone() is None:
+                    # Insert new group info if it doesn't exist
+                    cur.execute('''INSERT INTO group_info (group_id, last_used_vnf)
+                                VALUES (?, ?)''', (group_id, vnf_id))
+                else:
+                    # Update last used VNF for existing group
+                    cur.execute('''UPDATE group_info SET last_used_vnf = ? WHERE group_id = ?''',
+                                (vnf_id, group_id))
+
+                # Insert VNF into group_vnfs table
+                cur.execute('SELECT vnf_order FROM group_vnfs WHERE vnf_id = ?', (vnf_id,))
+                if cur.fetchone() is None:
+                    # Assuming vnf_order needs to be calculated or provided. Here we just fetch the max order and add one.
+                    cur.execute('SELECT MAX(vnf_order) FROM group_vnfs WHERE group_id = ?', (group_id,))
+                    max_order = cur.fetchone()[0]
+                    vnf_order = max_order + 1 if max_order is not None else 0
+
+                    cur.execute('''INSERT INTO group_vnfs (group_id, vnf_id, vnf_order)
+                                VALUES (?, ?, ?)''', (group_id, vnf_id, vnf_order))
+
                 cur.execute('SELECT id FROM vnf WHERE name = ? AND  iftype = ?',
                             (name, iftype)
                             )

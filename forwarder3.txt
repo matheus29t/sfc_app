@@ -1,1 +1,0 @@
-{name=forwarder3, vnf_id=3, type_id=1, group_id=1, iftype=3, bidirectional=False, geo_location=server3.rack2.row3.room4}
