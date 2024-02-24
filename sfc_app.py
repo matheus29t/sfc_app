@@ -1,12 +1,14 @@
 import sqlite3
 import json
 import logging
+import time
 from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, CONFIG_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
+from ryu.lib import hub
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import udp
@@ -310,6 +312,8 @@ class sfc_app_cls(app_manager.RyuApp):
         wsgi = kwargs['wsgi']
         wsgi.register(SFCController, {'sfc_api_app': self})
         self.datapaths = {}
+        self.vnf_last_seen = {}
+        hub.spawn(self.monitor_heartbeats)
 
 ######## database definition
 #        conn = sqlite3.connect('nfv.sqlite')
@@ -364,6 +368,10 @@ class sfc_app_cls(app_manager.RyuApp):
         match = parser.OFPMatch(eth_type=0x0800, ip_proto=17, udp_dst=30012)
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 1, match, actions)
+#### Set flow to retrieve heartbeat packet
+        match = parser.OFPMatch(eth_type=0x0800, ip_proto=17, udp_dst=30013)
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)]
+        self.add_flow(datapath, 1, match, actions)
 #### Set defaults for table 1 and 2
         match = parser.OFPMatch()
         actions = []
@@ -414,7 +422,7 @@ class sfc_app_cls(app_manager.RyuApp):
             flow_match = None
             pass
 
-####### VNF self registrtation
+####### VNF self registrtation & heartbeat
         in_port = msg.match['in_port']
         pkt = packet.Packet(msg.data)
         #pkt_arp = pkt.get_protocol(arp.arp) 
@@ -422,7 +430,7 @@ class sfc_app_cls(app_manager.RyuApp):
         #pkt_ip = pkt.get_protocol(ipv4.ipv4)
         pkt_udp = pkt.get_protocol(udp.udp)
         if pkt_udp:
-            if pkt_udp.dst_port == 30012:
+            if pkt_udp.dst_port == 30012: # Registration port
                 reg_string = pkt.protocols[-1]
                 reg_info = json.loads(reg_string)
                 name = reg_info['register']['name']
@@ -472,6 +480,18 @@ class sfc_app_cls(app_manager.RyuApp):
 
                 conn.commit()
                 #cur.close()
+            if pkt_udp and pkt_udp.dst_port == 30013:  # Assuming 30013 is the heartbeat port
+                # Parse the heartbeat packet
+                heartbeat_payload = pkt.protocols[-1]
+                try:
+                    heartbeat_info = json.loads(heartbeat_payload)
+                    vnf_id = heartbeat_info['vnf_id']  # Assuming the payload contains a 'vnf_id' key
+                    # Update the last seen time for this VNF
+                    if vnf_id not in self.vnf_last_seen:
+                        logging.debug("VNF %s is alive!", vnf_id)
+                    self.vnf_last_seen[vnf_id] = time.time()
+                except ValueError as e:
+                    self.logger.error('Failed to parse heartbeat packet: %s', str(e))
                 
 ############# Function definitions #############
     def add_flow(self, datapath, priority, match, actions,
@@ -536,3 +556,49 @@ class sfc_app_cls(app_manager.RyuApp):
         reverse_flow_dict['ipv6_dst'] = flow_dict['ipv6_src']
         return reverse_flow_dict
 
+######### Health Checks ###########
+    def monitor_heartbeats(self):
+        while True:
+            current_time = time.time()
+            for vnf_id, last_seen in list(self.vnf_last_seen.items()):
+                if current_time - last_seen > 15:  # Consider VNF down if no heartbeat for 30 seconds
+                    logging.debug('VNF %s is down!', vnf_id)
+                    del self.vnf_last_seen[vnf_id]
+                    self.regenerate_sfc_for_vnf(int(vnf_id))
+            hub.sleep(10)
+
+    def regenerate_sfc_for_vnf(self, vnf_id):
+        """
+        Regenerate the SFC for flows affected by the downed VNF.
+        """
+        affected_flows = []
+        
+        # Identify which flows are affected by the downed VNF
+        logging.debug('FLOWS: %s', flows)
+        for flow_id, sfc_instance in flows.items():
+            if vnf_id in [vnf.id for vnf in sfc_instance.forward()]:
+                logging.info(f"VNF {vnf_id} is down. Initiating flow regeneration.")
+                affected_flows.append(flow_id)
+        
+        # For each affected flow, regenerate
+        for flow_id in affected_flows:
+            self.regenerate_sfc(flow_id)
+
+    def regenerate_sfc(self, flow_id):
+        """
+        Regenerate the SFC for a given flow ID.
+        """
+        logging.debug(f"Regenerating SFC for flow ID: {flow_id}")
+        try:
+            flows[flow_id] = sfc(flow_id, cur=cur)
+        except ValueError:
+            message = {'Result': 'Flow {} is not defined'.format(flow_id)}
+            body = json.dumps(message)
+            return Response(content_type='application/json', body=body.encode('utf-8'), status=404)
+        except TypeError:
+            message = {'Result': 'DB inconsistency'}
+            body = json.dumps(message)
+            return Response(content_type='application/json', body=body.encode('utf-8'), status=500)
+        logging.info('Flow %s has been regenerated.', flow_id)
+        logging.debug('SFC: %s', str(flows[flow_id]))
+        flows[flow_id].install_catching_rule(self) # Use 'self' to refer to the current instance of sfc_app_cls

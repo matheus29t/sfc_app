@@ -5,6 +5,7 @@ import socket
 import sys
 import json
 import re
+import subprocess
 
 def main():
 
@@ -35,6 +36,7 @@ def main():
     # Parsing and processing
     options, args = op.parse_args()
     register_str=None
+    vnf_id=None
 
     if options.addr is None or options.port is None:
         print('No IP address or Port information is given. Exiting.')
@@ -72,6 +74,7 @@ def main():
             bidirectional=None)
 
         parse_register_str(register_dict, register_str)
+        vnf_id = register_dict['vnf_id']
 
         json_message = dict(name=options.event_name,
                             register=register_dict)
@@ -84,6 +87,14 @@ def main():
         logging.debug ('Failed to create socket')
         sys.exit(1)
     s.sendto(json.dumps(json_message).encode(), (options.addr, int(options.port)) )
+
+    if vnf_id:
+        command = [
+            '/usr/bin/env', 'python3', 'heartbeat.py',
+            str(vnf_id), options.addr, str(30013)
+        ]
+        # Assuming vnf_id, controller_addr, and controller_port are available
+        subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def parse_register_str(register_dict, register_str):
     m = re.search("name=[\'\"]?([\w._-]+)",register_str)
