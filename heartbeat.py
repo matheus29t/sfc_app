@@ -15,7 +15,7 @@ def send_heartbeat(vnf_id, controller_addr, controller_port):
         except Exception as e:
             print(f"Failed to send heartbeat for VNF {vnf_id}: {str(e)}")
         finally:
-            time.sleep(5)  # Adjust the sleep time as needed
+            time.sleep(2)  # Adjust the sleep time as needed
 
 if __name__ == "__main__":
     vnf_id = sys.argv[1]
