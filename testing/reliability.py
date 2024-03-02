@@ -26,6 +26,7 @@ class DatabaseManager:
             print(f"Database error: {e}")
         finally:
             conn.close()
+
 class NetworkManager:
     def __init__(self):
         self.hosts = self.get_hosts()
@@ -70,8 +71,6 @@ class SimulationCore:
         self.failure_start_times = {}
         self.flow_recovery_times = {}
 
-    # Method placeholders for 'select_flows', 'apply_flows', 'delete_flows', 'continuous_ping_flow',
-    # 'simulate_vnf_failure', 'report_reliability', and 'print_status' go here.
     def select_flows(self):
         flows = self.db_manager.get_flows()
         return random.sample(flows, random.randint(1, len(flows)))
@@ -202,7 +201,7 @@ if __name__ == '__main__':
     network_manager = NetworkManager()
 
     simulation_duration = 50  # Duration of the simulation in seconds
-    ping_interval = 5  # Interval between pings in seconds
+    ping_interval = 2  # Interval between pings in seconds
 
     simulation_core = SimulationCore(db_manager=db_manager,
                                      network_manager=network_manager,

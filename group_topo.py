@@ -81,6 +81,15 @@ def topology():
     h4.cmd('./json_register.py --file=vnfs/group2/vnf3.txt -a 10.0.0.253 -p 30012 -n registration')
     h5.cmd('./json_register.py --file=vnfs/group2/vnf4.txt -a 10.0.0.253 -p 30012 -n registration')
     h6.cmd('./json_register.py --file=vnfs/group3/vnf5.txt -a 10.0.0.253 -p 30012 -n registration')
+
+    print("*** Starting iperf3 on hosts")
+    h1.cmd('iperf3 -s -p 8000 &')
+    h2.cmd('iperf3 -s -p 8000 &')
+    h3.cmd('iperf3 -s -p 8000 &')
+    h4.cmd('iperf3 -s -p 8000 &')
+    h5.cmd('iperf3 -s -p 8000 &')
+    h6.cmd('iperf3 -s -p 8000 &')
+
     print("*** Running CLI")
     CLI( net )
  
