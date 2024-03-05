@@ -200,7 +200,7 @@ if __name__ == '__main__':
     db_manager = DatabaseManager(db_path=db_path)
     network_manager = NetworkManager()
 
-    simulation_duration = 50  # Duration of the simulation in seconds
+    simulation_duration = 100  # Duration of the simulation in seconds
     ping_interval = 2  # Interval between pings in seconds
 
     simulation_core = SimulationCore(db_manager=db_manager,

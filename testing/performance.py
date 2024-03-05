@@ -165,10 +165,36 @@ class PerformanceSimulationCore:
             print(f"Error running iperf3 client") #: {e.output}")
         return 0  # Throughput measurement failed or regex didn't match
 
+    def start_iperf_servers(self):
+        for host in self.network_manager.hosts:
+            pid = self.network_manager.get_pid(host)
+            if pid:
+                # Kill any iperf3 server process running within the Mininet host
+                server_cmd = f"sudo mnexec -a {pid} iperf3 -s -p 8000 -D &"
+                try:
+                    subprocess.Popen(server_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    time.sleep(1)  # Wait a bit for the server to start
+                except Exception as e:
+                    print(f"Failed to start iperf3 server on {host}: {e}")
+                    return 0
+
+    def cleanup_iperf_servers(self):
+        for host in self.network_manager.hosts:
+            pid = self.network_manager.get_pid(host)
+            if pid:
+                # Kill any iperf3 server process running within the Mininet host
+                cleanup_cmd = f"sudo mnexec -a {pid} pkill -f 'iperf3 -s -p 8000 -D'"
+                try:
+                    subprocess.check_output(cleanup_cmd, shell=True)
+                except Exception as e:
+                    print(f"Failed to clean up iperf3 server on {host}: {e}")
+
     def run_simulation(self):
         print("Starting simulation...")
         self.network_manager.get_host_ips()
         selected_flows = self.select_flows()
+
+        self.start_iperf_servers()
 
         self.total_measurements = (self.latency_samples + self.throughput_samples) * len(selected_flows)
 
@@ -210,6 +236,8 @@ class PerformanceSimulationCore:
         print("\nCleaning up: Deleting applied flows...")
         self.delete_flows(selected_flows)
 
+        #self.cleanup_iperf_servers()
+
         # Reporting
         print("\nFinal Report:")
         self.report_results()
@@ -236,7 +264,7 @@ if __name__ == '__main__':
     network_manager = PerformanceNetworkManager()
 
     latency_samples = 30
-    throughput_samples = 5
+    throughput_samples = 3
 
     simulation_core = PerformanceSimulationCore(db_manager=db_manager,
                                                 network_manager=network_manager,
