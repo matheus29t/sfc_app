@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 import sys
+import json
 
 def run_script(script_name):
     # Note: This won't capture real-time output to the console. Consider adapting if needed.
@@ -22,10 +23,11 @@ def update_plots(axs, reliability_scores, recovery_times, latencies, throughputs
     axs[1, 0].cla()
     axs[1, 1].cla()
 
-    axs[0, 0].hist(reliability_scores, bins=5, color='skyblue')
+    # Use boxplots instead of histograms for reliability scores and recovery times
+    axs[0, 0].boxplot(reliability_scores)
     axs[0, 0].set_title('Network Reliability (%)')
 
-    axs[0, 1].hist(recovery_times, bins=5, color='orange')
+    axs[0, 1].boxplot(recovery_times)
     axs[0, 1].set_title('Average Recovery Time (seconds)')
 
     axs[1, 0].boxplot(latencies)
@@ -35,6 +37,7 @@ def update_plots(axs, reliability_scores, recovery_times, latencies, throughputs
     axs[1, 1].set_title('Throughputs (Mbps)')
 
     plt.pause(0.1)
+
 
 def parse_reliability_output(output):
     reliability_match = re.search(r"Overall network reliability: (\d+\.\d+)%", output)
@@ -54,7 +57,20 @@ def parse_performance_output(output):
     
     return latencies, throughputs
 
-def measure_and_plot(reliability_iterations=10, performance_iterations=30):
+def save_to_file(data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f)
+
+def store_results(reliability_scores, recovery_times, latencies, throughputs):
+    # Save data to files
+    save_to_file(reliability_scores, 'results/reliability_scores.json')
+    save_to_file(recovery_times, 'results/recovery_times.json')
+    save_to_file(latencies, 'results/latencies.json')
+    save_to_file(throughputs, 'results/throughputs.json')
+    
+    print("Data has been saved successfully.")
+
+def measure_and_plot(reliability_iterations=1, performance_iterations=3):
     reliability_scores = []
     recovery_times = []
     latencies = []
@@ -82,6 +98,8 @@ def measure_and_plot(reliability_iterations=10, performance_iterations=30):
             update_plots(axs, reliability_scores, recovery_times, latencies, throughputs)
         
         print(f'\rSimulation progress: {((cur+1)/max(reliability_iterations, performance_iterations) * 100):.2f}%')
+
+    store_results(reliability_scores, recovery_times, latencies, throughputs)
 
     sys.stdout.flush()
     plt.ioff()
