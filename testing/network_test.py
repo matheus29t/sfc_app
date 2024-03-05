@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import re
 import sys
 import json
+import os
 
 def run_script(script_name):
     # Note: This won't capture real-time output to the console. Consider adapting if needed.
@@ -58,6 +59,10 @@ def parse_performance_output(output):
     return latencies, throughputs
 
 def save_to_file(data, filename):
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    
+    # Now save the file
     with open(filename, 'w') as f:
         json.dump(data, f)
 
@@ -70,7 +75,7 @@ def store_results(reliability_scores, recovery_times, latencies, throughputs):
     
     print("Data has been saved successfully.")
 
-def measure_and_plot(reliability_iterations=1, performance_iterations=3):
+def measure_and_plot(reliability_iterations=50, performance_iterations=50):
     reliability_scores = []
     recovery_times = []
     latencies = []

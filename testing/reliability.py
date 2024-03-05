@@ -124,10 +124,10 @@ class SimulationCore:
                 failed_host = random.choice(self.network_manager.hosts)
                 print(f"\nSimulating failure on {failed_host}")
                 subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} ifconfig {failed_host}-eth0 down", shell=True)
-                time.sleep(random.randint(5, 15))
+                time.sleep(random.randint(10, 15))
                 print(f"\nRecovering {failed_host}")
                 subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} ifconfig {failed_host}-eth0 up", shell=True)
-                time.sleep(random.randint(5, 15))
+                time.sleep(random.randint(10, 15))
 
         failure_thread = threading.Thread(target=_simulate_vnf_failure, args=(start_time,))
         failure_thread.start()
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     db_manager = DatabaseManager(db_path=db_path)
     network_manager = NetworkManager()
 
-    simulation_duration = 100  # Duration of the simulation in seconds
+    simulation_duration = 300  # Duration of the simulation in seconds
     ping_interval = 2  # Interval between pings in seconds
 
     simulation_core = SimulationCore(db_manager=db_manager,

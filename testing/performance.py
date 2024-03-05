@@ -263,8 +263,8 @@ if __name__ == '__main__':
     db_manager = PerformanceDatabaseManager(db_path=db_path)
     network_manager = PerformanceNetworkManager()
 
-    latency_samples = 30
-    throughput_samples = 3
+    latency_samples = 50
+    throughput_samples = 50
 
     simulation_core = PerformanceSimulationCore(db_manager=db_manager,
                                                 network_manager=network_manager,
