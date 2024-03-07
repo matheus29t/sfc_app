@@ -561,7 +561,7 @@ class sfc_app_cls(app_manager.RyuApp):
         while True:
             current_time = time.time()
             for vnf_id, last_seen in list(self.vnf_last_seen.items()):
-                if current_time - last_seen > 4:  # Consider VNF down if no heartbeat for 4 seconds
+                if current_time - last_seen > 4:  # Consider VNF down if no heartbeat for 5 seconds
                     logging.debug('VNF %s is down!', vnf_id)
                     del self.vnf_last_seen[vnf_id]
                     self.regenerate_sfc_for_vnf(int(vnf_id))

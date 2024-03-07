@@ -90,7 +90,7 @@ def main():
 
     if vnf_id:
         command = [
-            '/usr/bin/env', 'python3', 'heartbeat.py',
+            './heartbeat.py',
             str(vnf_id), options.addr, str(30013)
         ]
         # Assuming vnf_id, controller_addr, and controller_port are available

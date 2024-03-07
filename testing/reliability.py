@@ -123,11 +123,11 @@ class SimulationCore:
             while time.time() < start_time + self.duration:
                 failed_host = random.choice(self.network_manager.hosts)
                 print(f"\nSimulating failure on {failed_host}")
-                subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} ifconfig {failed_host}-eth0 down", shell=True)
-                time.sleep(random.randint(10, 15))
+                subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} tc qdisc add dev {failed_host}-eth0 root netem loss 100%", shell=True)
+                time.sleep(random.randint(30, 60))
                 print(f"\nRecovering {failed_host}")
-                subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} ifconfig {failed_host}-eth0 up", shell=True)
-                time.sleep(random.randint(10, 15))
+                subprocess.run(f"sudo mnexec -a {self.network_manager.get_pid(failed_host)} tc qdisc del dev {failed_host}-eth0 root", shell=True)
+                time.sleep(random.randint(5, 10))
 
         failure_thread = threading.Thread(target=_simulate_vnf_failure, args=(start_time,))
         failure_thread.start()
